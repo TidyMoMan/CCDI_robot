@@ -131,6 +131,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="backup.cpp" />
+    <ClCompile Include="char_defs.c" />
     <ClCompile Include="char_defs.h" />
     <ClCompile Include="CPPtest.cpp" />
     <ClCompile Include="image.cpp" />

@@ -8,7 +8,10 @@
 #include <math.h>
 #include <stddef.h>
 #include "strdef.h"
+
 #include "char_defs.h"
+#include "char_defs.c"
+
 #include <thread> // Required for std::this_thread::sleep_for
 #include <chrono> // Required for time units like std::chrono::seconds
 #include <fstream>   // For file input/output (std::ifstream)
@@ -43,6 +46,11 @@ using namespace std;
 path loadPathFromFile(string);
 path interpolate(POSE, POSE, float);
 path generateSpiral(int);
+path eraseBoard(POSE, POSE);
+path combinePaths(path, path);
+path createTextPath(string);
+path createCharPath(char, float);
+void printPath(path);
 
 INT main(VOID)
 {
@@ -75,7 +83,9 @@ INT main(VOID)
 
 	//attempt to load file to draw:
 
-	path currentPath = generateSpiral(500);//loadPathFromFile("C:\\Users\\Owner\\Desktop\\CPPtest\\CPPtest\\raylist.csv");
+	path currentPath = createTextPath("test");//generateSpiral(1000);//loadPathFromFile("C:\\Users\\Owner\\Desktop\\CPPtest\\CPPtest\\raylist.csv");
+	printPath(currentPath);
+
 
 	port = 10000;
 	strcpy(dst_ip_address, "192.168.0.20");
@@ -151,26 +161,16 @@ INT main(VOID)
 			MXTsend.RecvType1 = 1;
 			MXTsend.RecvType2 = 1;
 			MXTsend.RecvType3 = 1;
-			//switch (type) {
-			/*case MXT_TYP_JOINT:
-				memcpy(&MXTsend.dat.jnt, &jnt_now, sizeof(JOINT));
+			
+			memcpy(&MXTsend.dat.pos, &pos_now, sizeof(POSE));
 
-				MXTsend.dat.jnt.j1 += ((float)(delta * ratio * 3.141592 / 180.0));
+			MXTsend.dat.pos.w.x += (float)(tgtPose.w.x);
+			MXTsend.dat.pos.w.y += (float)(tgtPose.w.y);
+			MXTsend.dat.pos.w.z += (float)(tgtPose.w.z);
+			/*MXTsend.dat.pos.w.a += (float)(tgtPose.w.a * ratio);
+			MXTsend.dat.pos.w.b += (float)(tgtPose.w.b * ratio);*/
+			//MXTsend.dat.pos.w.c += (float)(tgtPose.w.c * ratio);
 
-				break;
-			case MXT_TYP_POSE:*/
-				memcpy(&MXTsend.dat.pos, &pos_now, sizeof(POSE));
-
-				MXTsend.dat.pos.w.x += (float)(tgtPose.w.x);
-				MXTsend.dat.pos.w.y += (float)(tgtPose.w.y);
-				MXTsend.dat.pos.w.z += (float)(tgtPose.w.z);
-				/*MXTsend.dat.pos.w.a += (float)(tgtPose.w.a * ratio);
-				MXTsend.dat.pos.w.b += (float)(tgtPose.w.b * ratio);*/
-				//MXTsend.dat.pos.w.c += (float)(tgtPose.w.c * ratio);
-
-				/*break;
-
-			}*/
 			MXTsend.SendIOType = IOSendType;
 			MXTsend.RecvIOType = IORecvType;
 			MXTsend.BitTop = IOBitTop;
@@ -296,21 +296,7 @@ INT main(VOID)
 					break;
 				}
 				switch (DispType) {
-				case MXT_TYP_JOINT:
-				case MXT_TYP_FJOINT:
-				case MXT_TYP_FB_JOINT:
-					if (loop == 1) {
-						memcpy(&jnt_now, DispData, sizeof(JOINT));
-						loop = 2;
-					}
-					if (disp) {
-						JOINT* j = (JOINT*)DispData;
-						sprintf(buf, "Receive (%ld): TCount=%dType(JOINT) = % d¥n % 7.2f, % 7.2f, % 7.2f, % 7.2f, % 7.2f, % 7.2f, % 7.2f, % 7.2f (% s)"
-							, MXTrecv.CCount, MXTrecv.TCount, DispType
-							, j->j1, j->j2, j->j3, j->j4, j->j5, j->j6, j->j7, j->j8, str);
-						std::cout << buf << endl;
-					}
-					break;
+				
 				case MXT_TYP_POSE:
 				case MXT_TYP_FPOSE:
 				case MXT_TYP_FB_POSE:
@@ -353,7 +339,7 @@ INT main(VOID)
 		} /* while(retry) */
 } /* while(loop) */
 // End
-std::cout << "/// End /// ";
+std::cout << "program ended" << endl;
 sprintf(buf, "counter = %ld", counter);
 std::cout << buf << endl;
 // Close socket
@@ -376,11 +362,11 @@ path interpolate(POSE start, POSE end, float stepSize) {
 
 	for (int i = 0; i < stepCount; i++) {
 		tempPose.w.x = start.w.x + ((float)(i / stepCount) * end.w.x);
-		tempPose.w.y = start.w.x + ((float)(i / stepCount) * end.w.y);
-		tempPose.w.z = start.w.x + ((float)(i / stepCount) * end.w.z);
-		tempPose.w.a = start.w.x + ((float)(i / stepCount) * end.w.a);
-		tempPose.w.b = start.w.x + ((float)(i / stepCount) * end.w.b);
-		tempPose.w.c = start.w.x + ((float)(i / stepCount) * end.w.c);
+		tempPose.w.y = start.w.y + ((float)(i / stepCount) * end.w.y);
+		tempPose.w.z = start.w.z + ((float)(i / stepCount) * end.w.z);
+		tempPose.w.a = start.w.a + ((float)(i / stepCount) * end.w.a);
+		tempPose.w.b = start.w.b + ((float)(i / stepCount) * end.w.b);
+		tempPose.w.c = start.w.c + ((float)(i / stepCount) * end.w.c);
 	}
 	return pathToReturn;
 }
@@ -443,16 +429,18 @@ path loadPathFromFile(string filename) {
 	return pathToReturn;
 }
 
-path eraseBoard(float boardSizeX, float boardSizeY){
+path eraseBoard(POSE startPoint, POSE stopPoint){
 
 	path erasePath;
 	POSE tempPose = { 0 };
 
-	for (int y = 0; y < boardSizeY; y++) {
+
+
+	/*for (int y = 0; y < boar; y++) {
 		for (int x = 0; x < boardSizeX; x++) {
 			erasePath.push_back(tempPose);
 		}
-	}
+	}*/
 
 	return erasePath;
 }
@@ -463,12 +451,80 @@ path generateSpiral(int steps){
 	path pathToReturn;
 
 	for (int t = 0; t < steps; t++) {
-		tempPose.w.x = 0.5*t + cos(t);
-		tempPose.w.y = 0.5*t + sin(t);
-		tempPose.w.z = 0;
+		tempPose.w.x = 0.5 * t * cos(t);
+		tempPose.w.y = 0;
+		tempPose.w.z = 0.5 * t * sin(t);
 		pathToReturn.push_back(tempPose);
 	}
 	return pathToReturn;
+}
+
+path createTextPath(string input) {
+	path textPath;
+	path currentChar;
+
+	int count = 0;
+	while (count < input.length()) {
+		currentChar = createCharPath(input[count], 1);
+		textPath = combinePaths(textPath, currentChar);
+		count++;
+	}
+	return textPath;
+}
+
+path createCharPath(char input, float scale){
+	//stupid prevention
+	if (input > 126 && input < 32) {
+		input = 32;
+	}
+	//shift down to array index
+	input = input - 32;
+
+	int numPoints = simplexchars[input][0];
+
+	path charPath;
+	POSE tempPose;
+
+	for (int i = 0; i < numPoints-1; i++) {
+
+		if (simplexchars[input][i] == -1 && simplexchars[input][i+1] == -1) {
+			//lift pen
+			tempPose.w.y = 1;
+		}
+		else {
+			//drop pen
+			tempPose.w.x = simplexchars[input][i];
+			tempPose.w.z = simplexchars[input][i + 1];
+			tempPose.w.y = 0;
+		}
+		charPath.push_back(tempPose);
+	}
+	return charPath;
+}
+
+path combinePaths(path first, path second) {
+	path combined;
+
+	for (int i = 0; i < size(first); i++) {
+		combined.push_back(first[i]);
+	}
+	for (int i = 0; i < size(second); i++) {
+		combined.push_back(second[i]);
+	}
+
+	return combined;
+}
+
+void printPath(path input) {
+	int count = 0;
+	cout << "printing path of size " << input.size() << endl;
+	while (count < input.size()){
+		
+		cout << "path[" << count << "].w.x = " << input[count].w.x << endl;
+		cout << "path[" << count << "].w.y = " << input[count].w.y << endl;
+		cout << "path[" << count << "].w.z = " << input[count].w.z << endl;
+		count++;
+	}
 }
 
 
