@@ -83,7 +83,7 @@ INT main(VOID)
 
 	//attempt to load file to draw:
 
-	path currentPath = createTextPath("test");//generateSpiral(1000);//loadPathFromFile("C:\\Users\\Owner\\Desktop\\CPPtest\\CPPtest\\raylist.csv");
+	path currentPath = createTextPath("!");//generateSpiral(1000);//loadPathFromFile("C:\\Users\\Owner\\Desktop\\CPPtest\\CPPtest\\raylist.csv");
 	printPath(currentPath);
 
 
@@ -474,6 +474,7 @@ path createTextPath(string input) {
 
 path createCharPath(char input, float scale){
 	//stupid prevention
+	cout << "generating charPath for character " << (char)input << endl;
 	if (input > 126 && input < 32) {
 		input = 32;
 	}
@@ -484,20 +485,44 @@ path createCharPath(char input, float scale){
 
 	path charPath;
 	POSE tempPose;
+	POSE lastPose;
 
-	for (int i = 0; i < numPoints-1; i++) {
+	int isPenUp = 1;
+
+	//the first two characters are the number of points and spacing of the letter respectively
+	for (int i = 2; i < (numPoints * 2) + 2; i+=2) {
 
 		if (simplexchars[input][i] == -1 && simplexchars[input][i+1] == -1) {
+			////goto position with pen down
+			//tempPose = lastPose;
+			//tempPose.w.y = 0;
+			//charPath.push_back(tempPose);
 			//lift pen
+			tempPose = lastPose;
 			tempPose.w.y = 1;
+			charPath.push_back(tempPose);
+
+			isPenUp = 1;
+
 		}
 		else {
-			//drop pen
+			if (isPenUp) {
+				//goto position with pen up
+				tempPose.w.x = simplexchars[input][i];
+				tempPose.w.z = simplexchars[input][i + 1];
+				tempPose.w.y = 1;
+				charPath.push_back(tempPose);
+			}
+
+			//then drop pen
 			tempPose.w.x = simplexchars[input][i];
 			tempPose.w.z = simplexchars[input][i + 1];
 			tempPose.w.y = 0;
+			charPath.push_back(tempPose);
+
+			isPenUp = 0;
+			lastPose = tempPose;
 		}
-		charPath.push_back(tempPose);
 	}
 	return charPath;
 }
@@ -523,6 +548,7 @@ void printPath(path input) {
 		cout << "path[" << count << "].w.x = " << input[count].w.x << endl;
 		cout << "path[" << count << "].w.y = " << input[count].w.y << endl;
 		cout << "path[" << count << "].w.z = " << input[count].w.z << endl;
+		cout << endl;
 		count++;
 	}
 }
