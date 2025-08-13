@@ -1,0 +1,1 @@
+extern int simplexchars[95][112];

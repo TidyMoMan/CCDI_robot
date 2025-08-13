@@ -27,12 +27,14 @@
 #define CANVAS_X 100
 #define CANVAS_Y 100
 
+#define CHAR_VERT_OFFSET 15
+
 #define FILE_PATH_SCALE_X 2
 #define FILE_PATH_SCALE_Y 2
-#define FILE_PATH_SCALE_Z 10
+#define FILE_PATH_SCALE_Z 50
 
 #define GLOBAL_PATH_SCALE_X 1
-#define GLOBAL_PATH_SCALE_Y 1
+#define GLOBAL_PATH_SCALE_Y 15
 #define GLOBAL_PATH_SCALE_Z 1
 
 //milliseconds
@@ -43,6 +45,11 @@ POSE tgtPose;
 typedef std::vector<POSE> path;
 using namespace std;
 
+//global offset values
+float offsetX = 0;
+//this is actually Z
+float offsetZ = 0;
+
 path loadPathFromFile(string);
 path interpolate(POSE, POSE, float);
 path generateSpiral(int);
@@ -51,6 +58,7 @@ path combinePaths(path, path);
 path createTextPath(string);
 path createCharPath(char, float);
 void printPath(path);
+string getUserInput();
 
 INT main(VOID)
 {
@@ -83,17 +91,19 @@ INT main(VOID)
 
 	//attempt to load file to draw:
 
-	path currentPath = createTextPath("!");//generateSpiral(1000);//loadPathFromFile("C:\\Users\\Owner\\Desktop\\CPPtest\\CPPtest\\raylist.csv");
-	printPath(currentPath);
+	//getUserInput();
+
+	path currentPath = createTextPath("employee of\nthe month:\nbobby");//generateSpiral(1000);//loadPathFromFile("C:\\Users\\Owner\\Desktop\\CPPtest\\CPPtest\\raylist.csv");
+	//printPath(currentPath);
+	cout << "path successfully generated" << endl;
 
 	port = 10000;
 	strcpy(dst_ip_address, "192.168.0.20");
 	
 	sprintf(msg, "IP=%s / PORT=%d", dst_ip_address, port);
 	std::cout << msg << endl;
-	std::cout << "[Enter]= End / [d]= Monitor data display";
-	std::cout << "[z/x]= Increment/decrement first command data transmitted by the delta amount. ";
-	std::cout << " Is it all right? [Enter] / [Ctrl+C] ";
+	std::cout << "[Enter]= End / [p]= Monitor data display" << endl;
+	std::cout << "Type c and press enter to start the program" << endl;
 	cin.getline(msg, MAXBUFLEN);
 	// Windows Socket DLL initialization
 	status = WSAStartup(MAKEWORD(1, 1), &Data);
@@ -190,8 +200,10 @@ INT main(VOID)
 		std::this_thread::sleep_for(std::chrono::milliseconds(PATH_STEP_DELAY));
 
 		pathIdx++;
-		if (pathIdx > 6456) {
-				return 0;
+		if (pathIdx > currentPath.size()) {
+			cout << "end of path reached" << endl;
+			MXTsend.Command = MXT_CMD_END;
+			return 0;
 		}
 
 		// Keyboard input
@@ -353,19 +365,30 @@ return 0;
 
 path interpolate(POSE start, POSE end, float stepSize) {
 
-	float length = sqrt(pow((end.w.x - start.w.y), 2) + pow((end.w.y - start.w.y), 2) + pow((end.w.z - start.w.z), 2));
+	float compX = (end.w.x - start.w.x);
+	float compY = (end.w.y - start.w.y);
+	float compZ = (end.w.z - start.w.z);
+
+	float length = sqrt(pow(compX, 2) + pow(compY, 2) + pow(compZ, 2));
+
 	int stepCount = ceil(length / stepSize);
 
 	path pathToReturn;
 	POSE tempPose = { 0 };
 
 	for (int i = 0; i < stepCount; i++) {
-		tempPose.w.x = start.w.x + ((float)(i / stepCount) * end.w.x);
-		tempPose.w.y = start.w.y + ((float)(i / stepCount) * end.w.y);
-		tempPose.w.z = start.w.z + ((float)(i / stepCount) * end.w.z);
-		tempPose.w.a = start.w.a + ((float)(i / stepCount) * end.w.a);
-		tempPose.w.b = start.w.b + ((float)(i / stepCount) * end.w.b);
-		tempPose.w.c = start.w.c + ((float)(i / stepCount) * end.w.c);
+
+		float norm = 1 / stepCount;
+
+		tempPose.w.x = start.w.x - (compX * norm);
+		tempPose.w.y = start.w.y - (compY * norm);
+		tempPose.w.z = start.w.z - (compZ * norm);
+	/*	tempPose.w.a = comp * norm;
+		tempPose.w.b = compX * norm;
+		tempPose.w.c = compX * norm;*/
+
+		pathToReturn.push_back(tempPose);
+
 	}
 	return pathToReturn;
 }
@@ -464,8 +487,18 @@ path createTextPath(string input) {
 
 	int count = 0;
 	while (count < input.length()) {
-		currentChar = createCharPath(input[count], 1);
-		textPath = combinePaths(textPath, currentChar);
+		//newline handling
+		if (input[count] == '\n') {
+			POSE homePose = { 0 };
+			cout << "generating path for newline" << endl;
+			textPath = combinePaths(textPath, interpolate(currentChar.back(), homePose, MAX_STEP_SIZE));
+			offsetZ += CHAR_VERT_OFFSET;
+		}
+		else {
+			currentChar = createCharPath(input[count], 1);
+			textPath = combinePaths(textPath, currentChar);
+		}
+
 		count++;
 	}
 	return textPath;
@@ -474,7 +507,7 @@ path createTextPath(string input) {
 path createCharPath(char input, float scale){
 	//stupid prevention
 	cout << "generating charPath for character " << (char)input << endl;
-	if (input > 126 && input < 32) {
+	if (input > 126 || input < 32) {
 		input = 32;
 	}
 	//shift down to array index
@@ -484,9 +517,16 @@ path createCharPath(char input, float scale){
 
 	path charPath;
 	POSE tempPose;
-	POSE lastPose;
 
 	int isPenUp = 1;
+	int flip = -1;
+	//goto initial pos with pen up
+	tempPose.w.x = (simplexchars[input][2] + offsetX) * flip;
+	tempPose.w.z = simplexchars[input][3] + offsetZ;
+	tempPose.w.y = 1;
+	charPath.push_back(tempPose);
+
+	POSE lastPose = tempPose;
 
 	//the first two characters are the number of points and spacing of the letter respectively
 	for (int i = 2; i < (numPoints * 2) + 2; i+=2) {
@@ -507,15 +547,15 @@ path createCharPath(char input, float scale){
 		else {
 			if (isPenUp) {
 				//goto position with pen up
-				tempPose.w.x = simplexchars[input][i];
-				tempPose.w.z = simplexchars[input][i + 1];
+				tempPose.w.x = (simplexchars[input][i] + offsetX) * flip;
+				tempPose.w.z = (simplexchars[input][i + 1] + offsetZ);
 				tempPose.w.y = 1;
 				charPath.push_back(tempPose);
 			}
 
 			//then drop pen
-			tempPose.w.x = simplexchars[input][i];
-			tempPose.w.z = simplexchars[input][i + 1];
+			tempPose.w.x = (simplexchars[input][i] + offsetX) * flip;
+			tempPose.w.z = (simplexchars[input][i + 1] + offsetZ);
 			tempPose.w.y = 0;
 			charPath.push_back(tempPose);
 
@@ -523,6 +563,14 @@ path createCharPath(char input, float scale){
 			lastPose = tempPose;
 		}
 	}
+	//add character offsetX after char and end with pen up
+	offsetX += simplexchars[input][1];
+
+	tempPose = lastPose;
+	tempPose.w.y = 1;
+	
+	charPath.push_back(tempPose);
+
 	return charPath;
 }
 
@@ -552,9 +600,26 @@ void printPath(path input) {
 	}
 }
 
+string getUserInput() {
+	cout << "what would you like the robot to display?" << endl;
+	int invalid = 1;
+	string input;
+	while (invalid) {
 
+		invalid = 0;
 
+		cout << "please enter a valid string:" << endl;
+		cin >> input;
 
+		for (int i = 0; i < input.length(); i++) {
+			if (input[i] > 126 || input[i] < 32) {
+				invalid = 1;
+			}
+		}
 
-
-
+		if (invalid) {
+			cout << "you have entered an invalid string, " << input << ", and/or used invalid characters. please only enter letters (caps are acceptable), digits, and top-row symbols." << endl;
+		}
+	}
+	return input;
+}
