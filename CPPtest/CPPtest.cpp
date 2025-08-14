@@ -23,26 +23,27 @@
 #define MAXBUFLEN 512
 
 //units are mm for all below
-#define MAX_STEP_SIZE 1
+#define MAX_STEP_SIZE 2
 #define CANVAS_X 100
 #define CANVAS_Y 100
 
-#define CHAR_VERT_OFFSET 15
+#define CHAR_VERT_OFFSET 35
 
 #define FILE_PATH_SCALE_X 2
 #define FILE_PATH_SCALE_Y 2
 #define FILE_PATH_SCALE_Z 50
 
-#define GLOBAL_PATH_SCALE_X 1
-#define GLOBAL_PATH_SCALE_Y 15
-#define GLOBAL_PATH_SCALE_Z 1
+#define GLOBAL_PATH_SCALE_X 1.5
+#define GLOBAL_PATH_SCALE_Y 20
+#define GLOBAL_PATH_SCALE_Z 1.5
 
 //milliseconds
-#define PATH_STEP_DELAY 150
+#define PATH_STEP_DELAY 100
 
 POSE tgtPose;
 
 typedef std::vector<POSE> path;
+
 using namespace std;
 
 //global offset values
@@ -57,6 +58,7 @@ path eraseBoard(POSE, POSE);
 path combinePaths(path, path);
 path createTextPath(string);
 path createCharPath(char, float);
+path createCharPath(char, POSE);
 void printPath(path);
 string getUserInput();
 
@@ -91,11 +93,9 @@ INT main(VOID)
 
 	//attempt to load file to draw:
 
-	//getUserInput();
+	path currentPath = createTextPath("today is:\ndate:time");//generateSpiral(1000);//loadPathFromFile("C:\\Users\\Owner\\Desktop\\CPPtest\\CPPtest\\raylist.csv");
 
-	path currentPath = createTextPath("employee of\nthe month:\nbobby");//generateSpiral(1000);//loadPathFromFile("C:\\Users\\Owner\\Desktop\\CPPtest\\CPPtest\\raylist.csv");
-	//printPath(currentPath);
-	cout << "path successfully generated" << endl;
+	cout << "path with " << currentPath.size() << " nodes successfully generated" << endl;
 
 	port = 10000;
 	strcpy(dst_ip_address, "192.168.0.20");
@@ -200,7 +200,7 @@ INT main(VOID)
 		std::this_thread::sleep_for(std::chrono::milliseconds(PATH_STEP_DELAY));
 
 		pathIdx++;
-		if (pathIdx > currentPath.size()) {
+		if (pathIdx > currentPath.size()-1) {
 			cout << "end of path reached" << endl;
 			MXTsend.Command = MXT_CMD_END;
 			return 0;
@@ -365,6 +365,12 @@ return 0;
 
 path interpolate(POSE start, POSE end, float stepSize) {
 
+	path interpPath;
+	interpPath.push_back(start);
+	interpPath.push_back(end);
+	cout << "interpolating on this path: " << endl;
+	printPath(interpPath);
+
 	float compX = (end.w.x - start.w.x);
 	float compY = (end.w.y - start.w.y);
 	float compZ = (end.w.z - start.w.z);
@@ -373,16 +379,21 @@ path interpolate(POSE start, POSE end, float stepSize) {
 
 	int stepCount = ceil(length / stepSize);
 
+	float stepX = compX / stepCount;
+	float stepY = compY / stepCount;
+	float stepZ = compZ / stepCount;
+
+
 	path pathToReturn;
 	POSE tempPose = { 0 };
 
-	for (int i = 0; i < stepCount; i++) {
+	for (int i = 1; i < stepCount+1; i++) {
 
-		float norm = 1 / stepCount;
+		tempPose.w.x = start.w.x + (stepX * i);
+		tempPose.w.y = start.w.y + (stepY * i);
+		tempPose.w.z = start.w.z + (stepZ * i);
 
-		tempPose.w.x = start.w.x - (compX * norm);
-		tempPose.w.y = start.w.y - (compY * norm);
-		tempPose.w.z = start.w.z - (compZ * norm);
+
 	/*	tempPose.w.a = comp * norm;
 		tempPose.w.b = compX * norm;
 		tempPose.w.c = compX * norm;*/
@@ -456,8 +467,6 @@ path eraseBoard(POSE startPoint, POSE stopPoint){
 	path erasePath;
 	POSE tempPose = { 0 };
 
-
-
 	/*for (int y = 0; y < boar; y++) {
 		for (int x = 0; x < boardSizeX; x++) {
 			erasePath.push_back(tempPose);
@@ -490,9 +499,24 @@ path createTextPath(string input) {
 		//newline handling
 		if (input[count] == '\n') {
 			POSE homePose = { 0 };
+
+			offsetX = 0; //back to the start of the line
+			offsetZ -= CHAR_VERT_OFFSET; //and down
+
+			homePose.w.y = 1; //pen up
+			homePose.w.z = offsetZ;
+			
 			cout << "generating path for newline" << endl;
-			textPath = combinePaths(textPath, interpolate(currentChar.back(), homePose, MAX_STEP_SIZE));
-			offsetZ += CHAR_VERT_OFFSET;
+
+			path interpPath = interpolate(textPath.back(), homePose, MAX_STEP_SIZE);
+
+			cout << "interp path with " << interpPath.size() << " nodes generated" << endl;
+
+			printPath(interpPath);
+
+			textPath = combinePaths(textPath, interpPath);
+			//offsetZ -= CHAR_VERT_OFFSET;
+			//offsetX = 0;
 		}
 		else {
 			currentChar = createCharPath(input[count], 1);
@@ -569,6 +593,76 @@ path createCharPath(char input, float scale){
 	tempPose = lastPose;
 	tempPose.w.y = 1;
 	
+	charPath.push_back(tempPose);
+
+	return charPath;
+}
+
+path createCharPath(char input, POSE startPoint) {
+	//stupid prevention
+	cout << "generating charPath for character " << (char)input << endl;
+	if (input > 126 || input < 32) {
+		input = 32;
+	}
+	//shift down to array index
+	input = input - 32;
+
+	int numPoints = simplexchars[input][0];
+
+	path charPath;
+	POSE tempPose;
+
+	int isPenUp = 1;
+	int flip = -1;
+	//goto initial pos with pen up
+	tempPose.w.x = (simplexchars[input][2] + offsetX) * flip;
+	tempPose.w.z = simplexchars[input][3] + offsetZ;
+	tempPose.w.y = 1;
+	charPath.push_back(tempPose);
+
+	POSE lastPose = tempPose;
+
+	//the first two characters are the number of points and spacing of the letter respectively
+	for (int i = 2; i < (numPoints * 2) + 2; i += 2) {
+
+		if (simplexchars[input][i] == -1 && simplexchars[input][i + 1] == -1) {
+			////goto position with pen down
+			//tempPose = lastPose;
+			//tempPose.w.y = 0;
+			//charPath.push_back(tempPose);
+			//lift pen
+			tempPose = lastPose;
+			tempPose.w.y = 1;
+			charPath.push_back(tempPose);
+
+			isPenUp = 1;
+
+		}
+		else {
+			if (isPenUp) {
+				//goto position with pen up
+				tempPose.w.x = (simplexchars[input][i] + offsetX) * flip;
+				tempPose.w.z = (simplexchars[input][i + 1] + offsetZ);
+				tempPose.w.y = 1;
+				charPath.push_back(tempPose);
+			}
+
+			//then drop pen
+			tempPose.w.x = (simplexchars[input][i] + offsetX) * flip;
+			tempPose.w.z = (simplexchars[input][i + 1] + offsetZ);
+			tempPose.w.y = 0;
+			charPath.push_back(tempPose);
+
+			isPenUp = 0;
+			lastPose = tempPose;
+		}
+	}
+	//add character offsetX after char and end with pen up
+	offsetX += simplexchars[input][1];
+
+	tempPose = lastPose;
+	tempPose.w.y = 1;
+
 	charPath.push_back(tempPose);
 
 	return charPath;

@@ -33,6 +33,9 @@
     <ClCompile Include="char_defs.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="tic_tac_toe.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\..\..\opencv\build\include\opencv2\calib3d\calib3d.hpp">

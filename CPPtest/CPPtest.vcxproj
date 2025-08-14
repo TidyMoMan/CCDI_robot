@@ -136,6 +136,7 @@
     <ClCompile Include="CPPtest.cpp" />
     <ClCompile Include="image.cpp" />
     <ClCompile Include="strdef.h" />
+    <ClCompile Include="tic_tac_toe.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\..\..\opencv\build\include\opencv2\calib3d.hpp" />
